@@ -1,205 +1,159 @@
+#!/usr/bin/env node
+
 /**
- * Ambilight WLED Sync - Main Entry Point
+ * Ambilight WLED Sync Service - Main Entry Point
  * 
- * This application syncs Philips Ambilight TV colors with WLED devices
+ * This service syncs Philips Ambilight TV colors with WLED devices
  * using three main modules:
  * 1. Ambilight - Connects to Philips TV via JointSpace API
  * 2. WLED - Sends color data via UDP
  * 3. Sync - Orchestrates the synchronization
  */
 
-import './style.css';
-import { AmbilightWLEDSync } from './sync';
+import { AmbilightWLEDSync } from './sync/index.js';
+import process from 'node:process';
 
-// Configuration
+// Configuration from environment variables or defaults
 const config = {
-  tvIp: '192.168.1.100',      // Change to your TV's IP address
-  wledHost: '192.168.1.101',  // Change to your WLED device's IP address
-  wledPort: 21324,            // Default WLED UDP port
-  pollInterval: 100,          // Update every 100ms (10 times per second)
-  apiVersion: 6,              // JointSpace API version
+  tvIp: '192.168.2.11',
+  wledHost: '192.168.2.2',
+  wledPort: 21324,
+  pollInterval: 10,
+  apiVersion: 6,
 };
 
-// Initialize the sync
+// Initialize the sync service
 let sync: AmbilightWLEDSync | null = null;
+let statsInterval: NodeJS.Timeout | null = null;
 
-// UI Setup
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <div>
-    <h1>Ambilight WLED Sync</h1>
-    <div class="config">
-      <h2>Configuration</h2>
-      <div class="form-group">
-        <label for="tv-ip">TV IP Address:</label>
-        <input type="text" id="tv-ip" value="${config.tvIp}" />
-      </div>
-      <div class="form-group">
-        <label for="wled-ip">WLED IP Address:</label>
-        <input type="text" id="wled-ip" value="${config.wledHost}" />
-      </div>
-      <div class="form-group">
-        <label for="poll-interval">Poll Interval (ms):</label>
-        <input type="number" id="poll-interval" value="${config.pollInterval}" min="50" max="1000" step="50" />
-      </div>
-    </div>
-    
-    <div class="controls">
-      <h2>Controls</h2>
-      <button id="start-average" type="button">Start (Average Mode)</button>
-      <button id="start-direct" type="button">Start (Direct Mode)</button>
-      <button id="stop" type="button" disabled>Stop</button>
-    </div>
-    
-    <div class="stats">
-      <h2>Statistics</h2>
-      <div id="stats-content">
-        <p>Status: <span id="status">Stopped</span></p>
-        <p>Updates: <span id="updates">0</span></p>
-        <p>Average Latency: <span id="latency">0</span> ms</p>
-        <p>Errors: <span id="errors">0</span></p>
-        <p>Last Update: <span id="last-update">Never</span></p>
-      </div>
-      <button id="reset-stats" type="button">Reset Statistics</button>
-    </div>
-  </div>
-`;
-
-// Get UI elements
-const tvIpInput = document.querySelector<HTMLInputElement>('#tv-ip')!;
-const wledIpInput = document.querySelector<HTMLInputElement>('#wled-ip')!;
-const pollIntervalInput = document.querySelector<HTMLInputElement>('#poll-interval')!;
-const startAverageBtn = document.querySelector<HTMLButtonElement>('#start-average')!;
-const startDirectBtn = document.querySelector<HTMLButtonElement>('#start-direct')!;
-const stopBtn = document.querySelector<HTMLButtonElement>('#stop')!;
-const resetStatsBtn = document.querySelector<HTMLButtonElement>('#reset-stats')!;
-const statusSpan = document.querySelector<HTMLSpanElement>('#status')!;
-const updatesSpan = document.querySelector<HTMLSpanElement>('#updates')!;
-const latencySpan = document.querySelector<HTMLSpanElement>('#latency')!;
-const errorsSpan = document.querySelector<HTMLSpanElement>('#errors')!;
-const lastUpdateSpan = document.querySelector<HTMLSpanElement>('#last-update')!;
-
-// Update stats display
-let statsInterval: number | null = null;
-
-function updateStatsDisplay(): void {
-  if (sync) {
-    const stats = sync.getStats();
-    const mode = sync.getMode();
-    
-    statusSpan.textContent = mode === 'stopped' ? 'Stopped' : `Running (${mode})`;
-    updatesSpan.textContent = stats.updateCount.toString();
-    latencySpan.textContent = stats.averageLatency.toFixed(2);
-    errorsSpan.textContent = stats.errors.toString();
-    lastUpdateSpan.textContent = stats.lastUpdate 
-      ? stats.lastUpdate.toLocaleTimeString() 
-      : 'Never';
-  }
-}
-
-function startStatsUpdate(): void {
-  if (statsInterval) {
-    clearInterval(statsInterval);
-  }
-  statsInterval = window.setInterval(updateStatsDisplay, 500);
-}
-
-function stopStatsUpdate(): void {
-  if (statsInterval) {
-    clearInterval(statsInterval);
-    statsInterval = null;
-  }
-}
-
-// Event handlers
-startAverageBtn.addEventListener('click', async () => {
+// Service control functions
+async function startService(): Promise<void> {
   try {
-    const currentConfig = {
-      tvIp: tvIpInput.value,
-      wledHost: wledIpInput.value,
-      wledPort: config.wledPort,
-      pollInterval: parseInt(pollIntervalInput.value, 10),
-      apiVersion: config.apiVersion,
-    };
+    console.log('🚀 Starting Ambilight WLED Sync Service...');
+    console.log(`📺 TV IP: ${config.tvIp}`);
+    console.log(`💡 WLED Host: ${config.wledHost}:${config.wledPort}`);
+    console.log(`⏱️  Poll Interval: ${config.pollInterval}ms`);
+    console.log('');
 
     if (sync) {
       sync.destroy();
     }
 
-    sync = new AmbilightWLEDSync(currentConfig);
-    await sync.startAverageSync();
-
-    startAverageBtn.disabled = true;
-    startDirectBtn.disabled = true;
-    stopBtn.disabled = false;
-    tvIpInput.disabled = true;
-    wledIpInput.disabled = true;
-    pollIntervalInput.disabled = true;
-
-    startStatsUpdate();
-  } catch (error) {
-    console.error('Failed to start sync:', error);
-    alert(`Failed to start sync: ${error}`);
-  }
-});
-
-startDirectBtn.addEventListener('click', async () => {
-  try {
-    const currentConfig = {
-      tvIp: tvIpInput.value,
-      wledHost: wledIpInput.value,
+    sync = new AmbilightWLEDSync({
+      tvIp: config.tvIp,
+      wledHost: config.wledHost,
       wledPort: config.wledPort,
-      pollInterval: parseInt(pollIntervalInput.value, 10),
+      pollInterval: config.pollInterval,
       apiVersion: config.apiVersion,
-    };
+    });
 
-    if (sync) {
-      sync.destroy();
-    }
+    await sync.startSync();
 
-    sync = new AmbilightWLEDSync(currentConfig);
-    await sync.startDirectSync();
+    console.log('✅ Service started successfully!');
+    startStatsReporting();
 
-    startAverageBtn.disabled = true;
-    startDirectBtn.disabled = true;
-    stopBtn.disabled = false;
-    tvIpInput.disabled = true;
-    wledIpInput.disabled = true;
-    pollIntervalInput.disabled = true;
-
-    startStatsUpdate();
   } catch (error) {
-    console.error('Failed to start sync:', error);
-    alert(`Failed to start sync: ${error}`);
+    console.error('❌ Failed to start service:', error);
+    process.exit(1);
   }
-});
+}
 
-stopBtn.addEventListener('click', () => {
+function stopService(): void {
+  console.log('🛑 Stopping Ambilight WLED Sync Service...');
+  
   if (sync) {
     sync.stop();
   }
 
-  startAverageBtn.disabled = false;
-  startDirectBtn.disabled = false;
-  stopBtn.disabled = true;
-  tvIpInput.disabled = false;
-  wledIpInput.disabled = false;
-  pollIntervalInput.disabled = false;
+  if (statsInterval) {
+    clearInterval(statsInterval);
+    statsInterval = null;
+  }
 
-  stopStatsUpdate();
-  updateStatsDisplay();
+  console.log('✅ Service stopped successfully!');
+}
+
+function startStatsReporting(): void {
+  // Report stats every 10 seconds
+  statsInterval = setInterval(() => {
+    if (sync) {
+      const stats = sync.getStats();
+      console.log(`📊 Updates: ${stats.updateCount} | Errors: ${stats.errors} | Avg Latency: ${stats.averageLatency.toFixed(1)}ms | Last: ${stats.lastUpdate?.toLocaleTimeString() || 'Never'}`);
+    }
+  }, 10000);
+}
+
+// Signal handlers
+process.on('SIGINT', () => {
+  console.log('\n🔄 Received SIGINT, shutting down gracefully...');
+  stopService();
+  process.exit(0);
 });
 
-resetStatsBtn.addEventListener('click', () => {
-  if (sync) {
-    sync.resetStats();
-    updateStatsDisplay();
-  }
+process.on('SIGTERM', () => {
+  console.log('\n🔄 Received SIGTERM, shutting down gracefully...');
+  stopService();
+  process.exit(0);
 });
 
-// Cleanup on page unload
-window.addEventListener('beforeunload', () => {
-  if (sync) {
-    sync.destroy();
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('💥 Uncaught Exception:', error);
+  stopService();
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+  stopService();
+  process.exit(1);
+});
+
+// CLI argument parsing
+function printUsage(): void {
+  console.log(`
+Ambilight WLED Sync Service
+
+Usage: 
+  node main.js [mode]
+
+Modes:
+  average  - Calculate average color and send to all LEDs (default)
+  direct   - Map TV zones directly to LED segments
+
+Environment Variables:
+  TV_IP          - IP address of Philips TV (default: 192.168.2.11)
+  WLED_HOST      - IP address of WLED device (default: 192.168.2.2)
+  WLED_PORT      - UDP port of WLED device (default: 21324)
+  POLL_INTERVAL  - Update interval in milliseconds (default: 100)
+  API_VERSION    - JointSpace API version (default: 6)
+  SYNC_MODE      - Default sync mode: average or direct (default: average)
+
+Examples:
+  node main.js
+  node main.js average
+  node main.js direct
+  TV_IP=192.168.1.100 WLED_HOST=192.168.1.200 node main.js
+`);
+}
+
+// Main execution
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  
+  if (args.includes('--help') || args.includes('-h')) {
+    printUsage();
+    return;
   }
-  stopStatsUpdate();
+
+  await startService();
+  
+  // Keep the process running
+  console.log('🔄 Service is running... Press Ctrl+C to stop.');
+}
+
+// Start the service
+main().catch((error) => {
+  console.error('💥 Fatal error:', error);
+  process.exit(1);
 });

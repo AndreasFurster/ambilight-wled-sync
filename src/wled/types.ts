@@ -6,6 +6,7 @@ export interface WLEDColor {
   r: number;
   g: number;
   b: number;
+  w?: number;  // Optional white channel for RGBW LEDs
 }
 
 export interface WLEDConfig {

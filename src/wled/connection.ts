@@ -1,10 +1,16 @@
 /**
  * WLED Connection Module
  * Sends color data to WLED using UDP protocol
+ * 
+ * Supports multiple WLED protocols:
+ * - Protocol 1 (WARLS): RGB with timeout
+ * - Protocol 2 (DRGB): Direct RGB
+ * - Protocol 3 (DRGB): Direct RGB (alternate)
+ * - Protocol 4 (DRGBW): Direct RGBW (default, supports white channel)
  */
 
 import dgram from 'node:dgram';
-import type { WLEDColor, WLEDConfig, WLEDProtocol } from './types';
+import type { WLEDColor, WLEDConfig, WLEDProtocol } from './types.js';
 
 export class WLEDConnection {
   private readonly host: string;
@@ -27,24 +33,25 @@ export class WLEDConnection {
   }
 
   /**
-   * Send a single color to all LEDs using WARLS protocol
-   * WARLS: 1 byte protocol ID + 1 byte timeout + 3 bytes RGB per LED
+   * Send a single color to all LEDs using DRGBW protocol
+   * DRGBW: 2 bytes header + 4 bytes RGBW per LED
    */
-  async sendColor(color: WLEDColor, protocol: WLEDProtocol = 1): Promise<void> {
+  async sendColor(color: WLEDColor, protocol: WLEDProtocol = 4): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         const socket = this.ensureSocket();
         
-        // Create WARLS protocol packet
-        // Byte 0: Protocol (1 = WARLS)
-        // Byte 1: Timeout in seconds (255 = use existing timeout)
-        // Bytes 2+: RGB data (3 bytes per LED)
+        // Create DRGBW protocol packet
+        // Byte 0: Protocol (4 = DRGBW)
+        // Byte 1: Timeout multiplier (1 = 1 second)
+        // Bytes 2+: RGBW data (4 bytes per LED)
         const buffer = Buffer.from([
-          protocol,           // Protocol
-          2,                  // Timeout (2 seconds)
+          protocol,           // Protocol (4 = DRGBW)
+          1,                  // Timeout multiplier
           color.r,            // Red
           color.g,            // Green
           color.b,            // Blue
+          color.w || 0,       // White (0 if not specified)
         ]);
 
         socket.send(buffer, 0, buffer.length, this.port, this.host, (error) => {
@@ -61,23 +68,27 @@ export class WLEDConnection {
   }
 
   /**
-   * Send multiple colors to LEDs using WARLS protocol
+   * Send multiple colors to LEDs using DRGBW protocol
    */
-  async sendColors(colors: WLEDColor[], protocol: WLEDProtocol = 1): Promise<void> {
+  async sendColors(colors: WLEDColor[], protocol: WLEDProtocol = 3): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         const socket = this.ensureSocket();
         
-        // Create WARLS protocol packet
+        // Create DRGBW protocol packet
         const data: number[] = [
-          protocol,  // Protocol
-          2,         // Timeout (2 seconds)
+          protocol,  // Protocol (4 = DRGBW)
+          2,         // Timeout multiplier
         ];
 
-        // Add RGB data for each LED
+        // Add RGBW data for each LED
         colors.forEach((color) => {
-          data.push(color.r, color.g, color.b);
+          data.push(color.r, color.g, color.b, color.w || 0); // Use white channel if specified
         });
+
+        // console.log(data.join(','));
+        // console.log('Update');
+        
 
         const buffer = Buffer.from(data);
 

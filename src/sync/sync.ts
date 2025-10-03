@@ -3,16 +3,17 @@
  * Connects Philips Ambilight and WLED
  */
 
-import { AmbilightConnection, type AmbilightColor } from '../ambilight';
-import { WLEDConnection, type WLEDColor } from '../wled';
-import type { SyncConfig, SyncStats, SyncMode } from './types';
+import { AmbilightConnection } from '../ambilight/index.js';
+import { WLEDConnection } from '../wled/index.js';
+import { mapAmbilightToWLED } from './mapping.js';
+import type { SyncConfig, SyncStats, SyncState } from './types.js';
 
 export class AmbilightWLEDSync {
   private ambilightConnection: AmbilightConnection;
   private wledConnection: WLEDConnection;
   private pollInterval: number;
   private intervalId: NodeJS.Timeout | null = null;
-  private mode: SyncMode = 'stopped' as SyncMode;
+  private mode: SyncState = 'stopped' as SyncState;
   private stats: SyncStats = {
     updateCount: 0,
     lastUpdate: null,
@@ -33,77 +34,28 @@ export class AmbilightWLEDSync {
   }
 
   /**
-   * Convert AmbilightColor to WLEDColor
-   */
-  private convertColor(color: AmbilightColor): WLEDColor {
-    return {
-      r: color.r,
-      g: color.g,
-      b: color.b,
-    };
-  }
-
-  /**
-   * Start syncing with average color mode
-   */
-  async startAverageSync(): Promise<void> {
-    if (this.intervalId) {
-      this.stop();
-    }
-
-    this.mode = 'average' as SyncMode;
-    console.log('Starting Ambilight to WLED sync (average mode)...');
-
-    this.intervalId = setInterval(async () => {
-      try {
-        const startTime = Date.now();
-
-        // Get current Ambilight colors
-        const cachedData = await this.ambilightConnection.getColors();
-        const colors = this.ambilightConnection.processColors(cachedData);
-
-        // Calculate average color
-        const averageColor = this.ambilightConnection.calculateAverageColor(colors);
-
-        // Send to WLED
-        await this.wledConnection.sendColor(this.convertColor(averageColor));
-
-        // Update stats
-        const latency = Date.now() - startTime;
-        this.stats.updateCount++;
-        this.stats.lastUpdate = new Date();
-        this.stats.averageLatency =
-          (this.stats.averageLatency * (this.stats.updateCount - 1) + latency) /
-          this.stats.updateCount;
-      } catch (error) {
-        this.stats.errors++;
-        console.error('Error syncing Ambilight to WLED:', error);
-      }
-    }, this.pollInterval);
-  }
-
-  /**
    * Start syncing with direct color mapping mode
    */
-  async startDirectSync(): Promise<void> {
+  async startSync(): Promise<void> {
     if (this.intervalId) {
       this.stop();
     }
 
-    this.mode = 'direct' as SyncMode;
-    console.log('Starting Ambilight to WLED sync (direct mode)...');
+    console.log('Starting Ambilight to WLED sync...');
+    this.mode = 'started' as SyncState;
+    
 
-    this.intervalId = setInterval(async () => {
+    while (this.mode !== 'stopped') {
       try {
         const startTime = Date.now();
 
         // Get current Ambilight colors
-        const cachedData = await this.ambilightConnection.getColors();
-        const colors = this.ambilightConnection.processColors(cachedData);
+        const colors = await this.ambilightConnection.getColors();
 
+        const mapped = mapAmbilightToWLED(colors, 0.4, 50);
+        
         // Convert and send all colors to WLED
-        const wledColors = colors.map((color) => this.convertColor(color));
-        await this.wledConnection.sendColors(wledColors);
+        await this.wledConnection.sendColors(mapped);
 
         // Update stats
         const latency = Date.now() - startTime;
@@ -116,19 +68,16 @@ export class AmbilightWLEDSync {
         this.stats.errors++;
         console.error('Error syncing Ambilight to WLED:', error);
       }
-    }, this.pollInterval);
+
+      await this.delay(this.pollInterval);
+    }
   }
 
   /**
    * Stop syncing
    */
   stop(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-      this.mode = 'stopped' as SyncMode;
-      console.log('Stopped Ambilight to WLED sync');
-    }
+    this.mode = 'stopped' as SyncState;
   }
 
   /**
@@ -141,7 +90,7 @@ export class AmbilightWLEDSync {
   /**
    * Get current sync mode
    */
-  getMode(): SyncMode {
+  getMode(): SyncState {
     return this.mode;
   }
 
@@ -163,5 +112,9 @@ export class AmbilightWLEDSync {
   destroy(): void {
     this.stop();
     this.wledConnection.close();
+  }
+
+  delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

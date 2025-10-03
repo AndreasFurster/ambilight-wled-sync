@@ -40,23 +40,30 @@ async function ambilightExample() {
 import { WLEDConnection } from './wled';
 
 async function wledExample() {
+  console.log('Starting WLED example...');
+  
   const wled = new WLEDConnection({
-    host: '192.168.1.101',
+    host: '192.168.2.2',
     port: 21324,
   });
 
-  // Send a single color to all LEDs
-  await wled.sendColor({ r: 255, g: 0, b: 0 }); // Red
+  console.log('WLED connection established');
 
-  // Wait 2 seconds
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  const indexToShow = 140
+  
+  // Create 100 random colors
+  const colors = Array.from({ length: indexToShow - 1 }, () => ({
+    r: 0,
+    g: 0,
+    b: 0,
+    w: 100,
+  }));
+
+  colors.push({ r: 255, g: 0, b: 0, w: 0 });
 
   // Send multiple colors (one per LED)
-  await wled.sendColors([
-    { r: 255, g: 0, b: 0 },   // Red
-    { r: 0, g: 255, b: 0 },   // Green
-    { r: 0, g: 0, b: 255 },   // Blue
-  ]);
+  await wled.sendColors(colors);
+
 
   // Close the connection when done
   wled.close();
@@ -142,6 +149,6 @@ async function advancedExample() {
 // ============================================================================
 
 // ambilightExample().catch(console.error);
-// wledExample().catch(console.error);
+wledExample().catch(console.error);
 // syncExample().catch(console.error);
 // advancedExample().catch(console.error);

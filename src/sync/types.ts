@@ -17,4 +17,4 @@ export interface SyncStats {
   errors: number;
 }
 
-export type SyncMode = 'average' | 'direct' | 'stopped';
+export type SyncState = 'started' | 'stopped';

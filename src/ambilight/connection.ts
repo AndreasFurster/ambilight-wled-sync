@@ -5,7 +5,7 @@
 
 import axios from 'axios';
 import type { AxiosInstance } from 'axios';
-import type { AmbilightColor, AmbilightTopology, AmbilightCachedData } from './types';
+import type { AmbilightColor, AmbilightTopology, AmbilightCachedData } from './types.js';
 
 export class AmbilightConnection {
   private readonly baseUrl: string;
@@ -45,8 +45,8 @@ export class AmbilightConnection {
    */
   async getColors(): Promise<AmbilightCachedData> {
     try {
-      const response = await this.axiosInstance.get('/ambilight/cached');
-      return response.data;
+      const response = await this.axiosInstance.get('/ambilight/processed'); // Processed, measured, cached
+      return response.data.layer1;
     } catch (error) {
       throw new Error(`Failed to get Ambilight colors: ${error}`);
     }
