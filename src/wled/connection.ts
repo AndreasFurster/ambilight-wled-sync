@@ -86,9 +86,7 @@ export class WLEDConnection {
           data.push(color.r, color.g, color.b, color.w || 0); // Use white channel if specified
         });
 
-        // console.log(data.join(','));
-        // console.log('Update');
-        
+        // let newSend = data.join(',');
 
         const buffer = Buffer.from(data);
 

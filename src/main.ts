@@ -18,7 +18,7 @@ const config = {
   tvIp: '192.168.2.11',
   wledHost: '192.168.2.2',
   wledPort: 21324,
-  pollInterval: 10,
+  pollInterval: 80,
   apiVersion: 6,
 };
 

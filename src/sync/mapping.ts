@@ -17,8 +17,8 @@ const LEFT_STRIP_1 = generateLEDArray({ start: 0, end: 21 }); // Right strip: 22
 const LEFT_STRIP_2 = generateLEDArray({ start: 57, end: 22 }); // Middle strip: 36 LEDs, bottom to top (tallest)
 const LEFT_STRIP_3 = generateLEDArray({ start: 58, end: 84 }); // Left strip: 28 LEDs, top to bottom
 
-const RIGHT_STRIP_1 = generateLEDArray({ start: 103, end: 85 }); // Left strip: 18 LEDs, bottom to top
-const RIGHT_STRIP_2 = generateLEDArray({ start: 104, end: 128 }); // Middle strip: 25 LEDs, top to bottom
+const RIGHT_STRIP_1 = generateLEDArray({ start: 102, end: 85 }); // Left strip: 18 LEDs, bottom to top
+const RIGHT_STRIP_2 = generateLEDArray({ start: 103, end: 128 }); // Middle strip: 25 LEDs, top to bottom
 const RIGHT_STRIP_3 = generateLEDArray({ start: 140, end: 129 }); // Right strip: 12 LEDs, bottom to top
 
 // ============================================================================
